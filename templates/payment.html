@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Razorpay Test Checkout</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; color: #222; }
+  fieldset { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 16px; padding: 14px; }
+  legend { font-weight: 600; padding: 0 6px; }
+  label { display: block; margin: 8px 0 2px; font-size: 14px; }
+  input, select { width: 100%; padding: 8px; box-sizing: border-box; }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  button { padding: 10px 16px; margin: 12px 8px 0 0; cursor: pointer; border: 0; border-radius: 6px; background: #2563eb; color: #fff; }
+  button.sec { background: #6b7280; }
+  .hint { font-size: 12px; color: #666; margin-top: 6px; }
+  #log { background: #111; color: #9ef59e; padding: 12px; border-radius: 8px; font-size: 12px; white-space: pre-wrap; max-height: 320px; overflow: auto; }
+</style>
+</head>
+<body>
+  {% csrf_token %}
+  <h2>Razorpay Test Checkout</h2>
+
+  <fieldset>
+    <legend>1. Login (token)</legend>
+    <div class="row">
+      <div><label>Login URL</label><input id="loginUrl" value="/api/users/login/"></div>
+      <div><label>Username / Email</label><input id="username"></div>
+      <div><label>Password</label><input id="password" type="password"></div>
+    </div>
+    <button class="sec" onclick="login()">Login &amp; get token</button>
+    <div class="row">
+      <div style="flex:0 0 120px"><label>Prefix</label>
+        <select id="prefix"><option>Bearer</option><option>Token</option></select>
+      </div>
+      <div><label>Access token</label><input id="token"></div>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>2. Order</legend>
+    <div class="row">
+      <div><label>Product ID</label><input id="pid" type="number" value="1"></div>
+      <div><label>Quantity</label><input id="qty" type="number" value="1" min="1"></div>
+    </div>
+    <label>Shipping address</label>
+    <input id="addr" value="Andheri West, Mumbai">
+    <label>Payment method</label>
+    <select id="method">
+      <option value="online">Online (Razorpay)</option>
+      <option value="cod">Cash on Delivery</option>
+    </select>
+    <button onclick="placeOrder()">Place Order &amp; Pay</button>
+    <div class="hint">Test card: 5267 3181 8797 5449</div>
+  </fieldset>
+
+  <fieldset>
+    <legend>3. Order status check</legend>
+    <label>Order ID</label>
+    <input id="orderId" type="number">
+    <button class="sec" onclick="checkOrder()">Check Order</button>
+  </fieldset>
+
+  <h3>Log</h3>
+  <div id="log">Ready...</div>
+
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script>
+    const $ = id => document.getElementById(id);
+
+    function log(label, obj) {
+      const text = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+      $("log").textContent += "\n[" + new Date().toLocaleTimeString() + "] " + label + "\n" + text + "\n";
+      $("log").scrollTop = $("log").scrollHeight;
+    }
+
+    $("token").value = localStorage.getItem("access") || "";
+
+    function headers() {
+      const h = { "Content-Type": "application/json" };
+      const t = $("token").value.trim();
+      if (t) {
+        h["Authorization"] = $("prefix").value + " " + t;
+      } else {
+        h["X-CSRFToken"] = document.querySelector("[name=csrfmiddlewaretoken]").value;
+      }
+      return h;
+    }
+
+    async function api(url, method, body) {
+      const res = await fetch(url, {
+        method: method,
+        headers: headers(),
+        body: body ? JSON.stringify(body) : undefined
+      });
+      let data;
+      try { data = await res.json(); } catch (e) { data = { error: "Non-JSON response" }; }
+      log(method + " " + url + " -> " + res.status, data);
+      return { ok: res.ok, status: res.status, data: data };
+    }
+
+    async function login() {
+      const res = await fetch($("loginUrl").value, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: $("username").value, password: $("password").value })
+      });
+      const data = await res.json().catch(() => ({}));
+      log("LOGIN -> " + res.status, data);
+      const token = data.access || data.token || data.key;
+      if (token) {
+        $("token").value = token;
+        localStorage.setItem("access", token);
+        log("Token saved", "OK");
+      } else {
+        log("Token nahi mila", "Response mein access/token/key dhundo, ya login field ka naam (username/email) check karo");
+      }
+    }
+
+    async function placeOrder() {
+      const pid = parseInt($("pid").value);
+      const qty = parseInt($("qty").value);
+
+      const r = await api("/api/orders/place/", "POST", {
+        items: [{ product_id: pid, quantity: qty }],
+        product_id: pid,
+        quantity: qty,
+        shipping_address: $("addr").value,
+        payment_method: $("method").value
+      });
+      if (!r.ok) return;
+
+      $("orderId").value = r.data.order_id;
+      if (r.data.payment_method === "cod") {
+        log("COD order placed", "Order #" + r.data.order_id);
+        return;
+      }
+      openRazorpay(r.data);
+    }
+
+    function openRazorpay(d) {
+      if (typeof Razorpay === "undefined") {
+        return log("ERROR", "Razorpay script load nahi hui, internet check karo");
+      }
+      let paid = false;
+
+      const rzp = new Razorpay({
+        key: d.razorpay_key_id,
+        amount: d.amount,
+        currency: d.currency || "INR",
+        name: "My Ecommerce",
+        description: "Order #" + d.order_id,
+        order_id: d.razorpay_order_id,
+
+        handler: async function (resp) {
+          paid = true;
+          log("Razorpay success", resp);
+          await api("/api/payments/verify/", "POST", {
+            razorpay_order_id: resp.razorpay_order_id,
+            razorpay_payment_id: resp.razorpay_payment_id,
+            razorpay_signature: resp.razorpay_signature
+          });
+          await checkOrder();
+        },
+
+        modal: {
+          ondismiss: async function () {
+            if (paid) return;
+            log("Popup band hua bina payment ke", "cancel call ja rahi hai (lamba view mein hi hota hai)");
+            await api("/api/payments/cancel/", "POST", { order_id: d.order_id });
+          }
+        }
+      });
+
+      rzp.on("payment.failed", function (r) { log("payment.failed", r.error); });
+      rzp.open();
+    }
+
+    async function checkOrder() {
+      const id = $("orderId").value;
+      if (!id) return log("Order ID daalo", "");
+      await api("/api/orders/" + id + "/", "GET");
+    }
+  </script>
+</body>
+</html>

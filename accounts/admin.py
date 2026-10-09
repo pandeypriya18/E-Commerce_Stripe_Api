@@ -1,4 +1,8 @@
 from django.contrib import admin
-from accounts.models import User
+from accounts.models import MyUser
 
-admin.site.register(User)
+@admin.register(MyUser)
+class MyUserAdmin(admin.ModelAdmin):
+    list_display = [ 'username','role','is_staff','email','is_active']
+    list_filter = ['role',]
+    search_fields = ['username','email','role']
