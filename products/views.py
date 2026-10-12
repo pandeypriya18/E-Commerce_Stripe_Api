@@ -82,11 +82,48 @@ class ProductView(APIView):
          product.delete()
          return Response({"message":"Successfully Deleted."},status=status.HTTP_204_NO_CONTENT)
 
-class CategoryView(ModelViewSet): 
-     queryset = Category.objects.all()
+class CategoryView(APIView): 
      permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-     serializer_class = CategorySerializer              
-                 
-                
+     serializer_class = CategorySerializer
 
+     def get(self , request):
+          category = Category.objects.all()
+          serializer = CategorySerializer(category , many=True)
+          return Response(serializer.data)
 
+     def post(self,request,id):
+          
+          if request.user.role == "customer":
+               return Response({"error":"U r not allowed to add category."})
+
+          if not Category.objects.filter(
+               category_name=request.data.get("category_name")
+               ).exists():
+               serializer = CategorySerializer(data=request.data)
+               
+               if serializer.is_valid():
+                    serializer.save()
+                    return Response(serializer.data, status=201)
+
+               return Response(serializer.errors, status=400)
+
+          return Response(
+               {"error": "Category already exists"},
+               status=400
+               )
+     def delete(self , request,id):
+          if not request.user.is_authenticated:
+               return Response({"error":"Authentication is required."},status=status.HTTP_401_UNAUTHORIZED)
+
+          
+
+          if not request.user.is_staff:
+               return Response({"error":"U r not allowed to change the category."},status=status.HTTP_400_BAD_REQUEST)
+
+          category = Category.objects.get(id=id)  
+
+        
+          category.delete()   
+
+          return Response({"message":"Category Successfully Deleted."},status=status.HTTP_200_OK)
+               
