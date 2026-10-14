@@ -3,9 +3,12 @@ from rest_framework.views import APIView
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from accounts.serializers import RegisterSerializer,LoginSerializer
+from accounts.serializers import RegisterSerializer,LoginSerializer,ChangePasswordSerializer , ForgetPasswordSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework import permissions
+from django.conf import settings   
+from django.core.mail import send_mail
 
 class RegisterView(APIView):
 
@@ -48,3 +51,38 @@ class LogoutView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+class ChangePasswordView(APIView):
+   permission_classes = [permissions.IsAuthenticated]
+   serializer_class = ChangePasswordSerializer
+
+   def post(self, request):
+      serializer = ChangePasswordSerializer(data = request.data , 
+                                            context = {"request":request})
+      if serializer.is_valid():
+         user = request.user
+         user.set_password(serializer.validated_data["new_password"])
+         user.save()
+
+         return Response({"message":"Password Changed Successfully."},status=status.HTTP_200_OK)
+      return Response(serializer.errors , status=status.HTTP_400_BAD_REQUEST)
+
+class ForgetPasswordView(APIView):
+
+   def post(self, request):
+      serializer = ForgetPasswordSerializer(data = request.data)
+
+      if not serializer.is_valid():
+         return Response(serializer.errors , status=status.HTTP_404_NOT_FOUND)
+
+      email = serializer.validated_data["email"]
+
+      
+      user = MyUser.objects.get(email=email)
+      if user:
+            send_mail(
+               subject="Reset your password",
+               message=f"Click the link to reset your password:",
+               from_email=settings.DEFAULT_FROM_EMAIL,
+               recipient_list=[user.email],
+               )
+      return Response({"message":"If email exists , Reset link has been sent."} , status = status.HTTP_200_OK)

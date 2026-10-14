@@ -12,12 +12,27 @@ class ProductView(APIView):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     serializer_class = ProductSerializer
 
-    def get(self , request):
-            products = Product.objects.all()
-            serializer = ProductSerializer(products , many = True)
-            return Response(serializer.data)
+    def get(self ,request ,id=None):
+          print(self.request)
+          print(self.args)
+          print(self.kwargs)
+          if id is not None:
+               product = get_object_or_404(Product , id=id )
+               serializer = ProductSerializer(product)
+               return Response(serializer.data)
+               #   try:
+               #      product = Product.objects.get(id=id)
+               #      serializer = ProductSerializer(product)
+               #      return Response(serializer.data)
+               #   except Product.DoesNotExist:
+               #      return Response({"error":"Product Not Found."} ,status=status.HTTP_404_NOT_FOUND)
+
+          products = Product.objects.all()
+          serializer = ProductSerializer(products , many = True)
+          return Response(serializer.data)
     
-    def post(self, request ,id):
+    
+    def post(self, request):
 
        serializer = ProductSerializer(data=request.data)
 
@@ -35,11 +50,6 @@ class ProductView(APIView):
        )
 
     def patch(self , request, id):
-         if not request.user.is_authenticated:
-              return Response(
-                   {"error":"Authentication is required"},
-                   status=status.HTTP_401_UNAUTHORIZED
-              )
 
          if request.user.role == "customer":
               return Response(
@@ -66,11 +76,7 @@ class ProductView(APIView):
               return Response({"error":"Something went wrong"},status=status.HTTP_400_BAD_REQUEST)
          
     def delete(self , request, id):
-         if not request.user.is_authenticated:
-              return Response({"error":"Authorization is required"},
-                               status=status.HTTP_401_UNAUTHORIZED 
-                               )
-         
+     
          product = Product.objects.get(id=id)
 
          is_owner = request.user == product.owner
@@ -91,39 +97,42 @@ class CategoryView(APIView):
           serializer = CategorySerializer(category , many=True)
           return Response(serializer.data)
 
-     def post(self,request,id):
+     def post(self,request):
           
           if request.user.role == "customer":
                return Response({"error":"U r not allowed to add category."})
 
-          if not Category.objects.filter(
-               category_name=request.data.get("category_name")
-               ).exists():
-               serializer = CategorySerializer(data=request.data)
-               
-               if serializer.is_valid():
-                    serializer.save()
-                    return Response(serializer.data, status=201)
-
-               return Response(serializer.errors, status=400)
-
-          return Response(
-               {"error": "Category already exists"},
-               status=400
-               )
-     def delete(self , request,id):
-          if not request.user.is_authenticated:
-               return Response({"error":"Authentication is required."},status=status.HTTP_401_UNAUTHORIZED)
-
           
+          serializer = CategorySerializer(data=request.data)
+          
+          if serializer.is_valid():
+               serializer.save()
+               return Response(serializer.data, status=201)
+
+          return Response(serializer.errors, status=400)
+
+     
+     def patch(self, request, id):
+          category = get_object_or_404(Category, id=id)
+          serializer = CategorySerializer(category, data=request.data,partial=True)
+          if serializer.is_valid():
+               serializer.save()
+
+               return Response({"message": "Successfully Updated.","data": serializer.data}, status=status.HTTP_200_OK)
+
+          return Response(serializer.errors,status=status.HTTP_400_BAD_REQUEST)
+         
+     def delete(self , request,id):
 
           if not request.user.is_staff:
-               return Response({"error":"U r not allowed to change the category."},status=status.HTTP_400_BAD_REQUEST)
+               return Response({"error":"You are not allowed to change the category."},status=status.HTTP_400_BAD_REQUEST)
 
-          category = Category.objects.get(id=id)  
+          try:
+               category = Category.objects.get(id=id) 
+          except Exception as e:
+               return Response({"error":" Category doesn't exist"},status=status.HTTP_404_NOT_FOUND) 
 
-        
           category.delete()   
-
+          
           return Response({"message":"Category Successfully Deleted."},status=status.HTTP_200_OK)
-               
+                    

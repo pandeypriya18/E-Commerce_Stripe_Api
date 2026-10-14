@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from accounts.models import MyUser
 from django.contrib.auth import get_user_model
+from rest_framework.exceptions import ValidationError
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -58,3 +59,31 @@ class LoginSerializer(serializers.Serializer):
 
         data["user"] = user
         return data
+    
+class ChangePasswordSerializer(serializers.Serializer):
+     old_password = serializers.CharField(write_only = True , required = True)
+     new_password = serializers.CharField(write_only=True , required= True)
+     confirm_password = serializers.CharField(write_only=True , required=True)
+
+     def validate(self , data):
+          user = self.context["request"].user
+
+          if not user.check_password(data["old_password"]):
+               raise ValidationError({"old_password":"Old password is Incorrect."})
+
+          if data["new_password"] == data["old_password"]:
+               raise ValidationError({"error":"Please Enter a different password."})
+
+          if data["new_password"] != data["confirm_password"]:
+               raise ValidationError({"error":"New password and Confirm password must be same."})
+          return data
+
+class ForgetPasswordSerializer(serializers.Serializer):
+     email = serializers.EmailField( max_length=200)
+
+     def validate_email(self ,value):
+          if not MyUser.objects.filter(email=value).exists():
+               raise ValidationError({"error":"This email doesn't exists."})
+          return value
+
+
