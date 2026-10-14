@@ -172,5 +172,4 @@ MAILERS = {
 
 DEFAULT_FROM_EMAIL = os.environ["MAIL_HOST_USER"]
 
-print(MAILERS)
 

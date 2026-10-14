@@ -86,4 +86,11 @@ class ForgetPasswordSerializer(serializers.Serializer):
                raise ValidationError({"error":"This email doesn't exists."})
           return value
 
+class UserSerializer(serializers.ModelSerializer):
+     class Meta:
+          model = MyUser
+          fields = ['id','username','role','email']
+
+
+
 

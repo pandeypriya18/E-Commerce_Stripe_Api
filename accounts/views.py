@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from accounts.serializers import RegisterSerializer,LoginSerializer,ChangePasswordSerializer , ForgetPasswordSerializer
+from accounts.serializers import RegisterSerializer,LoginSerializer,ChangePasswordSerializer , ForgetPasswordSerializer , UserSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework import permissions
@@ -31,6 +31,11 @@ class LoginView(APIView):
          return Response({"message":"Login successful.", "refresh": str(refresh), "access": str(refresh.access_token)}, status=status.HTTP_200_OK)
       return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class MeView(APIView):
+   def get(self , request):
+      serializer = UserSerializer(request.user)
+      return Response(serializer.data)
+      
 class LogoutView(APIView):
 
     def post(self, request):
